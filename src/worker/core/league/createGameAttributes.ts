@@ -276,7 +276,7 @@ const createGameAttributes = async (
 	}
 
 	if (gameAttributes.reverseDraftNumProspects < 0) {
-		throw new Error("reverseDraftNumProspects must be a positive number");
+		throw new Error("reverseDraftNumProspects must be a non-negative number");
 	}
 
 	if (gameAttributes.reverseDraftNumSuitors < 1) {
