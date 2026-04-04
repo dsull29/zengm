@@ -42,7 +42,7 @@ const getAllStarCountAtPos = (
 			continue;
 		}
 		if (p.awards.some((award) => award.type === "All-Star")) {
-			count += 1;
+			count++;
 		}
 	}
 	return count;

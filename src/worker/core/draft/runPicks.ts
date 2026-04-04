@@ -218,6 +218,7 @@ const runPicks = async (
 				selection = random.choice(playersAll, score);
 			}
 
+			// selectedDp may differ from draftPicks[0] in reverse draft mode
 			draftPicks = draftPicks.filter((p) => p.dpid !== selectedDp.dpid);
 
 			const pid = selection.pid;
