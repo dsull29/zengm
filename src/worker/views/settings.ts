@@ -115,6 +115,10 @@ type Key =
 	| "draftPickAutoContract"
 	| "draftPickAutoContractPercent"
 	| "draftPickAutoContractRounds"
+	| "reverseDraft"
+	| "reverseDraftNumProspects"
+	| "reverseDraftNumSuitors"
+	| "reverseDraftWeights"
 	| "dh"
 	| "draftLotteryCustomNumPicks"
 	| "draftLotteryCustomChances"
@@ -337,6 +341,10 @@ const updateSettings = async (inputs: unknown, updateEvents: UpdateEvents) => {
 			draftPickAutoContract: g.get("draftPickAutoContract"),
 			draftPickAutoContractPercent: g.get("draftPickAutoContractPercent"),
 			draftPickAutoContractRounds: g.get("draftPickAutoContractRounds"),
+			reverseDraft: g.get("reverseDraft"),
+			reverseDraftNumProspects: g.get("reverseDraftNumProspects"),
+			reverseDraftNumSuitors: g.get("reverseDraftNumSuitors"),
+			reverseDraftWeights: g.get("reverseDraftWeights"),
 			dh: g.get("dh"),
 			draftLotteryCustomNumPicks: g.get("draftLotteryCustomNumPicks"),
 			draftLotteryCustomChances: g.get("draftLotteryCustomChances"),

@@ -1044,6 +1044,15 @@ const draftUser = async (pid: number, conditions: Conditions) => {
 	const dp = draftPicks[0];
 
 	if (dp && g.get("userTids").includes(dp.tid)) {
+		if (
+			g.get("phase") === PHASE.DRAFT &&
+			g.get("reverseDraft") &&
+			dp.round === 1 &&
+			dp.pick <= g.get("reverseDraftNumProspects")
+		) {
+			return;
+		}
+
 		draftPicks.shift();
 		await draft.selectPlayer(dp, pid);
 		await draft.afterPicks(draftPicks.length === 0, conditions);

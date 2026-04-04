@@ -1,6 +1,8 @@
 import { DRAFT_BY_TEAM_OVR, PHASE, PLAYER } from "../../../common/index.ts";
 import afterPicks from "./afterPicks.ts";
+import getReverseDraftSuitors from "./getReverseDraftSuitors.ts";
 import getOrder from "./getOrder.ts";
+import prospectChoosesTeam from "./prospectChoosesTeam.ts";
 import selectPlayer from "./selectPlayer.ts";
 import { idb } from "../../db/index.ts";
 import { g, local, lock, random } from "../../util/index.ts";
@@ -169,35 +171,59 @@ const runPicks = async (
 				return afterDoneAuto();
 			}
 
-			draftPicks.shift();
+			const reverseDraftEnabled =
+				g.get("phase") === PHASE.DRAFT &&
+				g.get("reverseDraft") &&
+				dp.round === 1 &&
+				dp.pick <= g.get("reverseDraftNumProspects");
 
-			const teamPlayers = await idb.cache.players.indexGetAll(
-				"playersByTid",
-				dp.tid,
-			);
-			const teamOvrDiffs = await getTeamOvrDiffs(teamPlayers, playersAll);
-
-			const score = (p: Player<MinimalPlayerRatings>, i: number) => {
-				if (DRAFT_BY_TEAM_OVR) {
-					return (teamOvrDiffs[i]! + 0.05 * p.value) ** 40;
+			let selectedDp = dp;
+			let selection: Player<MinimalPlayerRatings>;
+			let reverseDraftExplanation: string | undefined;
+			if (reverseDraftEnabled) {
+				const suitors = getReverseDraftSuitors(
+					draftPicks,
+					g.get("reverseDraftNumSuitors"),
+				);
+				if (suitors.length > 0) {
+					const prospect = playersAll[0];
+					if (!prospect) {
+						throw new Error("No top prospect available");
+					}
+					const reverseResult = await prospectChoosesTeam({
+						prospect,
+						suitors,
+						weights: g.get("reverseDraftWeights"),
+					});
+					selectedDp = reverseResult.selectedPick;
+					selection = prospect;
+					reverseDraftExplanation = reverseResult.explanation;
+				} else {
+					selection = playersAll[0]!;
 				}
+			} else {
+				const teamPlayers = await idb.cache.players.indexGetAll(
+					"playersByTid",
+					dp.tid,
+				);
+				const teamOvrDiffs = await getTeamOvrDiffs(teamPlayers, playersAll);
 
-				return p.value ** 69;
-			};
-			/*let sum = 0;
-			for (const p of playersAll) {
-				sum += score(p);
-			}
-			for (let i = 0; i < playersAll.length; i++) {
-				const p = playersAll[i];
-				console.log(p.firstName, p.lastName, teamOvrDiffs[i], 0.05 * p.value, score(p) / sum);
-			}
-			console.log(sum);*/
+				const score = (p: Player<MinimalPlayerRatings>, i: number) => {
+					if (DRAFT_BY_TEAM_OVR) {
+						return (teamOvrDiffs[i]! + 0.05 * p.value) ** 40;
+					}
 
-			const selection = random.choice(playersAll, score);
+					return p.value ** 69;
+				};
+				selection = random.choice(playersAll, score);
+			}
+
+			draftPicks = draftPicks.filter((p) => p.dpid !== selectedDp.dpid);
 
 			const pid = selection.pid;
-			await selectPlayer(dp, pid);
+			await selectPlayer(selectedDp, pid, {
+				reverseDraftExplanation,
+			});
 			pids.push(pid);
 			playersAll = playersAll.filter((p) => p !== selection); // Delete from the list of undrafted players
 

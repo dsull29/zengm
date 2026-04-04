@@ -82,3 +82,40 @@ test("when called again after the user drafts, should draft more players to fini
 	const numAfter = 60 - userPick2;
 	return testRunPicks(numAfter, userPick2 + numAfter);
 });
+
+test("reverse draft mode drafts top prospects to suitor teams for early first-round picks", async () => {
+	g.setWithoutSavingToDB("reverseDraft", true);
+	g.setWithoutSavingToDB("reverseDraftNumProspects", 5);
+	g.setWithoutSavingToDB("reverseDraftNumSuitors", 10);
+	g.setWithoutSavingToDB("reverseDraftWeights", {
+		market: 0.35,
+		quality: 0.35,
+		fit: 0.3,
+		randomness: 0,
+	});
+
+	await loadTeamSeasons();
+	await draft.genPlayers(g.get("season"), DEFAULT_LEVEL);
+	await draft.genOrder();
+
+	const preDraft = await draft.getOrder();
+	const suitorTids = new Set(
+		preDraft
+			.filter((dp) => dp.round === 1 && dp.pick <= 10)
+			.map((dp) => dp.tid),
+	);
+
+	await draft.runPicks({ type: "untilPick", dpid: preDraft[5]!.dpid });
+
+	const drafted = (
+		await idb.cache.players.indexGetAll("playersByDraftYearRetiredYear", [
+			[g.get("season")],
+			[g.get("season"), Infinity],
+		])
+	).filter((p) => p.tid >= 0 && p.draft.round === 1 && p.draft.pick <= 5);
+
+	assert.strictEqual(drafted.length, 5);
+	assert.ok(drafted.every((p) => suitorTids.has(p.tid)));
+
+	g.setWithoutSavingToDB("reverseDraft", false);
+});

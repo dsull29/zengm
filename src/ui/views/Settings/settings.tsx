@@ -669,6 +669,66 @@ export const settings: Setting[] = (
 		},
 		{
 			category: "Draft",
+			key: "reverseDraft",
+			name: "Enable Reverse Draft (Prospects Choose Teams)",
+			godModeRequired: "existingLeagueOnly",
+			type: "bool",
+			description:
+				"For top prospects in round 1, prospects pick among bottom suitor teams instead of teams picking prospects.",
+		},
+		{
+			category: "Draft",
+			key: "reverseDraftNumProspects",
+			name: "# Reverse Draft Prospects (X)",
+			godModeRequired: "existingLeagueOnly",
+			type: "int",
+			description:
+				'Number of top first-round picks handled by prospect choice when "Enable Reverse Draft" is on.',
+			validator: (value) => {
+				if (value < 0) {
+					throw new Error("Value cannot be less than 0");
+				}
+			},
+		},
+		{
+			category: "Draft",
+			key: "reverseDraftNumSuitors",
+			name: "# Reverse Draft Suitor Teams (Y)",
+			godModeRequired: "existingLeagueOnly",
+			type: "int",
+			description:
+				'Number of earliest first-round pick slots that define the suitor pool when "Enable Reverse Draft" is on.',
+			validator: (value) => {
+				if (value < 1) {
+					throw new Error("Value cannot be less than 1");
+				}
+			},
+		},
+		{
+			category: "Draft",
+			key: "reverseDraftWeights",
+			name: "Reverse Draft Weights",
+			godModeRequired: "existingLeagueOnly",
+			type: "jsonString",
+			description:
+				'JSON object controlling team selection weights, like {"market":0.35,"quality":0.35,"fit":0.3,"randomness":0.02}.',
+			validator: async (value) => {
+				if (
+					typeof value !== "object" ||
+					value === null ||
+					Array.isArray(value)
+				) {
+					throw new Error("Must be an object");
+				}
+				for (const key of ["market", "quality", "fit", "randomness"] as const) {
+					if (typeof (value as any)[key] !== "number") {
+						throw new Error(`Missing or invalid numeric field "${key}"`);
+					}
+				}
+			},
+		},
+		{
+			category: "Draft",
 			key: "numDraftRounds",
 			name: "# Draft Rounds",
 			godModeRequired: "existingLeagueOnly",
