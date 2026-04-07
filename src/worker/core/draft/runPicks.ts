@@ -175,7 +175,9 @@ const runPicks = async (
 				g.get("phase") === PHASE.DRAFT &&
 				g.get("reverseDraft") &&
 				dp.round === 1 &&
-				dp.pick <= g.get("reverseDraftNumProspects");
+				g.get("numActiveTeams") -
+					draftPicks.filter((p) => p.round === 1).length <
+					g.get("reverseDraftNumProspects");
 
 			let selectedDp = dp;
 			let selection: Player<MinimalPlayerRatings>;

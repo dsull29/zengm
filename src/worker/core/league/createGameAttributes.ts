@@ -283,6 +283,10 @@ const createGameAttributes = async (
 		throw new Error("reverseDraftNumSuitors must be greater than 0");
 	}
 
+	if (gameAttributes.reverseDraftNumSuitors > gameAttributes.numActiveTeams) {
+		gameAttributes.reverseDraftNumSuitors = gameAttributes.numActiveTeams;
+	}
+
 	if (
 		gameAttributes.reverseDraftNumProspects >
 		gameAttributes.reverseDraftNumSuitors
@@ -290,10 +294,6 @@ const createGameAttributes = async (
 		throw new Error(
 			"reverseDraftNumProspects must be less than or equal to reverseDraftNumSuitors",
 		);
-	}
-
-	if (gameAttributes.reverseDraftNumSuitors > gameAttributes.numActiveTeams) {
-		gameAttributes.reverseDraftNumSuitors = gameAttributes.numActiveTeams;
 	}
 
 	{
