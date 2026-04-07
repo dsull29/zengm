@@ -171,13 +171,16 @@ const runPicks = async (
 				return afterDoneAuto();
 			}
 
+			const firstRoundPicksRemaining = draftPicks.filter(
+				(p) => p.round === 1,
+			).length;
+			const firstRoundPicksMade =
+				g.get("numActiveTeams") - firstRoundPicksRemaining;
 			const reverseDraftEnabled =
 				g.get("phase") === PHASE.DRAFT &&
 				g.get("reverseDraft") &&
 				dp.round === 1 &&
-				g.get("numActiveTeams") -
-					draftPicks.filter((p) => p.round === 1).length <
-					g.get("reverseDraftNumProspects");
+				firstRoundPicksMade < g.get("reverseDraftNumProspects");
 
 			let selectedDp = dp;
 			let selection: Player<MinimalPlayerRatings>;
