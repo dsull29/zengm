@@ -138,9 +138,8 @@ export const getReverseDraftSuitorsWhoRankProspect = async ({
 	for (const suitor of suitors) {
 		const userProspectVotes = userProspectVotesByTid?.[suitor.tid];
 		if (userProspectVotes) {
-			if (
-				userProspectVotes.slice(0, numRankedProspects).includes(prospect.pid)
-			) {
+			const votedProspects = userProspectVotes.slice(0, numRankedProspects);
+			if (votedProspects.includes(prospect.pid)) {
 				screenedSuitors.push(suitor);
 			}
 			continue;
