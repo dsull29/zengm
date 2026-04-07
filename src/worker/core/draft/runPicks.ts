@@ -14,6 +14,14 @@ import type {
 } from "../../../common/types.ts";
 import { player, team } from "../index.ts";
 
+const DRAFT_SCORE_VALUE_WEIGHT = 0.05;
+const DRAFT_SCORE_EXPONENT_BY_TEAM_OVR = 40;
+const DRAFT_SCORE_EXPONENT_BY_VALUE = 69;
+const RANK_CHOICE_PENALTY_SAME_POS = 7;
+const RANK_CHOICE_PENALTY_TOP_SAME_POS_OVR = 0.12;
+const RANK_CHOICE_PENALTY_ALL_STARS = 9;
+const RANK_CHOICE_TEAM_OVR_DIFF_WEIGHT = 4;
+
 export const getTeamOvrDiffs = (
 	teamPlayers: PlayerWithoutKey<MinimalPlayerRatings>[],
 	players: PlayerWithoutKey<MinimalPlayerRatings>[],
@@ -71,10 +79,13 @@ const getDraftScore = (
 	teamOvrDiffs: number[],
 ) => {
 	if (DRAFT_BY_TEAM_OVR) {
-		return (teamOvrDiffs[i]! + 0.05 * p.value) ** 40;
+		return (
+			(teamOvrDiffs[i]! + DRAFT_SCORE_VALUE_WEIGHT * p.value) **
+			DRAFT_SCORE_EXPONENT_BY_TEAM_OVR
+		);
 	}
 
-	return p.value ** 69;
+	return p.value ** DRAFT_SCORE_EXPONENT_BY_VALUE;
 };
 
 const getRankChoiceVoteScore = (
@@ -97,8 +108,12 @@ const getRankChoiceVoteScore = (
 		allStars: 0,
 	};
 	const fitPenalty =
-		7 * posStats.count + 0.12 * posStats.maxOvr + 9 * posStats.allStars;
-	return p.value + 4 * teamOvrDiffs[i]! - fitPenalty;
+		RANK_CHOICE_PENALTY_SAME_POS * posStats.count +
+		RANK_CHOICE_PENALTY_TOP_SAME_POS_OVR * posStats.maxOvr +
+		RANK_CHOICE_PENALTY_ALL_STARS * posStats.allStars;
+	return (
+		p.value + RANK_CHOICE_TEAM_OVR_DIFF_WEIGHT * teamOvrDiffs[i]! - fitPenalty
+	);
 };
 
 export const getReverseDraftSuitorsWhoRankProspect = async ({

@@ -140,9 +140,9 @@ test("reverse-draft suitor screen can exclude a prospect from all suitors if nob
 	)
 		.filter((p) => p.tid === PLAYER.UNDRAFTED)
 		.sort((a, b) => b.value - a.value);
-	const lowRankedProspect = players.at(-1)!;
+	const lowestValueProspect = players.at(-1)!;
 	const screenedSuitors = await getReverseDraftSuitorsWhoRankProspect({
-		prospect: lowRankedProspect,
+		prospect: lowestValueProspect,
 		playersAll: players,
 		suitors,
 		numRankedProspects: 5,
