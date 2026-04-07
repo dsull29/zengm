@@ -150,3 +150,48 @@ test("reverse-draft suitor screen can exclude a prospect from all suitors if nob
 
 	assert.strictEqual(screenedSuitors.length, 0);
 });
+
+test("reverse-draft suitor screen honors explicit manual votes", async () => {
+	await loadTeamSeasons();
+	await draft.genPlayers(g.get("season"), DEFAULT_LEVEL);
+	await draft.genOrder();
+
+	const draftPicks = await draft.getOrder();
+	const suitors = draftPicks.filter((dp) => dp.round === 1 && dp.pick <= 10);
+	const manualVoteSuitor = suitors[0]!;
+	assert.ok(manualVoteSuitor);
+
+	const players = (
+		await idb.cache.players.indexGetAll("playersByDraftYearRetiredYear", [
+			[g.get("season")],
+			[g.get("season"), Infinity],
+		])
+	)
+		.filter((p) => p.tid === PLAYER.UNDRAFTED)
+		.sort((a, b) => b.value - a.value);
+
+	const topProspect = players[0]!;
+	const otherProspect = players[1]!;
+
+	const screenedWithoutVote = await getReverseDraftSuitorsWhoRankProspect({
+		prospect: topProspect,
+		playersAll: players,
+		suitors,
+		numRankedProspects: 5,
+		userProspectVotesByTid: {
+			[manualVoteSuitor.tid]: [otherProspect.pid],
+		},
+	});
+	assert.ok(screenedWithoutVote.every((dp) => dp.tid !== manualVoteSuitor.tid));
+
+	const screenedWithVote = await getReverseDraftSuitorsWhoRankProspect({
+		prospect: topProspect,
+		playersAll: players,
+		suitors,
+		numRankedProspects: 5,
+		userProspectVotesByTid: {
+			[manualVoteSuitor.tid]: [topProspect.pid],
+		},
+	});
+	assert.ok(screenedWithVote.some((dp) => dp.tid === manualVoteSuitor.tid));
+});

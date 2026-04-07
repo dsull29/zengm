@@ -1,5 +1,6 @@
 import clsx from "clsx";
 import { Fragment, useState } from "react";
+import { PHASE } from "../../../common/index.ts";
 import useTitleBar from "../../hooks/useTitleBar.tsx";
 import {
 	confirm,
@@ -35,6 +36,10 @@ const Draft = ({
 	expansionDraftFilteredTeamsMessage,
 	fantasyDraft,
 	godMode,
+	reverseDraft,
+	reverseDraftNumProspects,
+	reverseDraftNumSuitors,
+	reverseDraftUserProspectVotes,
 	season,
 	spectator,
 	stats,
@@ -52,10 +57,21 @@ const Draft = ({
 		undefined,
 	);
 	const [prevDrafted, setPrevDrafted] = useState(drafted);
+	const [reverseDraftVotes, setReverseDraftVotes] = useState(
+		reverseDraftUserProspectVotes,
+	);
+	const [
+		prevReverseDraftUserProspectVotes,
+		setPrevReverseDraftUserProspectVotes,
+	] = useState(reverseDraftUserProspectVotes);
 
 	if (drafted !== prevDrafted) {
 		setSortedDpids(undefined);
 		setPrevDrafted(drafted);
+	}
+	if (reverseDraftUserProspectVotes !== prevReverseDraftUserProspectVotes) {
+		setReverseDraftVotes(reverseDraftUserProspectVotes);
+		setPrevReverseDraftUserProspectVotes(reverseDraftUserProspectVotes);
 	}
 
 	// Use the result of drag and drop to sort drafted players and picks, before the "official" order comes back as props
@@ -111,6 +127,19 @@ const Draft = ({
 	const usersTurn = !!(nextPick && userTids.includes(nextPick.draft.tid));
 
 	const canEditDraftOrder = godMode && remainingPicks.length > 0;
+	const phase = useLocal((state) => state.phase);
+	const showReverseDraftVoteScreen =
+		phase === PHASE.DRAFT &&
+		reverseDraft &&
+		!fantasyDraft &&
+		!expansionDraft &&
+		!spectator &&
+		remainingPicks.some(
+			(p) =>
+				p.draft.round === 1 &&
+				p.draft.pick <= reverseDraftNumSuitors &&
+				userTids.includes(p.draft.tid),
+		);
 
 	const sortableRows = editDraftOrder && canEditDraftOrder;
 
@@ -122,6 +151,18 @@ const Draft = ({
 			},
 		},
 	);
+	if (showReverseDraftVoteScreen) {
+		colsUndrafted.splice(
+			6,
+			0,
+			...getCols(["Vote"], {
+				Vote: {
+					noSearch: true,
+					sortSequence: [],
+				},
+			}),
+		);
+	}
 
 	if (fantasyDraft || expansionDraft) {
 		colsUndrafted.splice(
@@ -136,6 +177,7 @@ const Draft = ({
 	}
 
 	const rowsUndrafted: DataTableRow[] = undrafted.map((p) => {
+		const reverseDraftVoteRank = reverseDraftVotes.indexOf(p.pid);
 		const data = [
 			p.rank,
 			wrappedPlayerNameLabels({
@@ -177,6 +219,39 @@ const Draft = ({
 				</div>
 			),
 		];
+		if (showReverseDraftVoteScreen) {
+			data.splice(
+				6,
+				0,
+				<button
+					className={clsx("btn btn-xs", {
+						"btn-success": reverseDraftVoteRank >= 0,
+						"btn-light-bordered": reverseDraftVoteRank < 0,
+					})}
+					onClick={async () => {
+						let newVotes;
+						if (reverseDraftVoteRank >= 0) {
+							newVotes = reverseDraftVotes.filter((pid) => pid !== p.pid);
+						} else if (reverseDraftVotes.length < reverseDraftNumProspects) {
+							newVotes = [...reverseDraftVotes, p.pid];
+						} else {
+							newVotes = [
+								...reverseDraftVotes.slice(0, reverseDraftNumProspects - 1),
+								p.pid,
+							];
+						}
+						setReverseDraftVotes(newVotes);
+						await toWorker(
+							"main",
+							"setReverseDraftUserProspectVotes",
+							newVotes,
+						);
+					}}
+				>
+					{reverseDraftVoteRank >= 0 ? `#${reverseDraftVoteRank + 1}` : "Vote"}
+				</button>,
+			);
+		}
 
 		if (fantasyDraft || expansionDraft) {
 			data.splice(
@@ -492,6 +567,29 @@ const Draft = ({
 						Compare top {Math.min(5, undrafted.length)} remaining{" "}
 						{helpers.plural("prospect", undrafted.length)}
 					</a>
+				</div>
+			) : null}
+			{showReverseDraftVoteScreen ? (
+				<div className="alert alert-info">
+					<div className="d-flex gap-2 justify-content-between align-items-start">
+						<div>
+							<b>Reverse Draft Votes</b>: rank your top{" "}
+							{reverseDraftNumProspects} prospects for your suitor team. A
+							prospect can only choose your team if you voted for him.
+							<br />
+							Current votes: {reverseDraftVotes.length}/
+							{reverseDraftNumProspects}
+						</div>
+						<button
+							className="btn btn-xs btn-light-bordered"
+							onClick={async () => {
+								setReverseDraftVotes([]);
+								await toWorker("main", "setReverseDraftUserProspectVotes", []);
+							}}
+						>
+							Clear votes
+						</button>
+					</div>
 				</div>
 			) : null}
 

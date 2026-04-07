@@ -1406,6 +1406,7 @@ export type Local = {
 	playerOvrStd: number;
 	playerOvrMeanStdStale: boolean;
 	playingUntilEndOfRound: boolean;
+	reverseDraftUserProspectVotes: Record<number, number[]> | undefined;
 	realPlayerActiveSeasons:
 		| Record<
 				string,

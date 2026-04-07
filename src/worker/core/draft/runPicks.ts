@@ -121,11 +121,13 @@ export const getReverseDraftSuitorsWhoRankProspect = async ({
 	playersAll,
 	suitors,
 	numRankedProspects,
+	userProspectVotesByTid,
 }: {
 	prospect: Player<MinimalPlayerRatings>;
 	playersAll: Player<MinimalPlayerRatings>[];
 	suitors: Awaited<ReturnType<typeof getReverseDraftSuitors>>;
 	numRankedProspects: number;
+	userProspectVotesByTid?: Record<number, number[]>;
 }) => {
 	const prospectIndex = playersAll.findIndex((p) => p.pid === prospect.pid);
 	if (prospectIndex < 0) {
@@ -134,6 +136,16 @@ export const getReverseDraftSuitorsWhoRankProspect = async ({
 
 	const screenedSuitors = [];
 	for (const suitor of suitors) {
+		const userProspectVotes = userProspectVotesByTid?.[suitor.tid];
+		if (userProspectVotes) {
+			if (
+				userProspectVotes.slice(0, numRankedProspects).includes(prospect.pid)
+			) {
+				screenedSuitors.push(suitor);
+			}
+			continue;
+		}
+
 		const teamPlayers = await idb.cache.players.indexGetAll(
 			"playersByTid",
 			suitor.tid,
@@ -329,6 +341,7 @@ const runPicks = async (
 						playersAll,
 						suitors,
 						numRankedProspects: g.get("reverseDraftNumProspects"),
+						userProspectVotesByTid: local.reverseDraftUserProspectVotes,
 					});
 					if (screenedSuitors.length > 0) {
 						const reverseResult = await prospectChoosesTeam({

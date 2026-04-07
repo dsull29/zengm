@@ -3536,6 +3536,13 @@ const setGOATFormula = async ({
 	}
 };
 
+const setReverseDraftUserProspectVotes = async (pids: number[]) => {
+	local.reverseDraftUserProspectVotes = {
+		...(local.reverseDraftUserProspectVotes ?? {}),
+		[g.get("userTid")]: [...new Set(pids)],
+	};
+};
+
 const setLocal = async <T extends keyof Local>([key, value]: [T, Local[T]]) => {
 	if (key === "autoSave" && value === false) {
 		await idb.cache.flush();
@@ -5243,6 +5250,7 @@ export default {
 		setGOATFormula,
 		setLocal,
 		setNote,
+		setReverseDraftUserProspectVotes,
 		setSavedTrade,
 		setScheduleFromEditor,
 		sign,
