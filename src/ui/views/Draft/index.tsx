@@ -177,7 +177,7 @@ const Draft = ({
 	}
 
 	const rowsUndrafted: DataTableRow[] = undrafted.map((p) => {
-		const reverseDraftVoteRank = reverseDraftVotes.indexOf(p.pid);
+		const reverseDraftVoteIndex = reverseDraftVotes.indexOf(p.pid);
 		const data = [
 			p.rank,
 			wrappedPlayerNameLabels({
@@ -225,12 +225,12 @@ const Draft = ({
 				0,
 				<button
 					className={clsx("btn btn-xs", {
-						"btn-success": reverseDraftVoteRank >= 0,
-						"btn-light-bordered": reverseDraftVoteRank < 0,
+						"btn-success": reverseDraftVoteIndex >= 0,
+						"btn-light-bordered": reverseDraftVoteIndex < 0,
 					})}
 					onClick={async () => {
 						let newVotes;
-						if (reverseDraftVoteRank >= 0) {
+						if (reverseDraftVoteIndex >= 0) {
 							newVotes = reverseDraftVotes.filter((pid) => pid !== p.pid);
 						} else if (reverseDraftVotes.length < reverseDraftNumProspects) {
 							newVotes = [...reverseDraftVotes, p.pid];
@@ -248,7 +248,9 @@ const Draft = ({
 						);
 					}}
 				>
-					{reverseDraftVoteRank >= 0 ? `#${reverseDraftVoteRank + 1}` : "Vote"}
+					{reverseDraftVoteIndex >= 0
+						? `#${reverseDraftVoteIndex + 1}`
+						: "Vote"}
 				</button>,
 			);
 		}
