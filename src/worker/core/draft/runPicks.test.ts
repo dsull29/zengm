@@ -6,6 +6,7 @@ import { idb } from "../../db/index.ts";
 import { g } from "../../util/index.ts";
 import { getDraftTids, loadTeamSeasons } from "./testHelpers.ts";
 import { DEFAULT_LEVEL } from "../../../common/budgetLevels.ts";
+import { getReverseDraftSuitorsWhoRankProspect } from "./runPicks.ts";
 
 const testRunPicks = async (numNow: number, numTotal: number) => {
 	const pids = await draft.runPicks({ type: "untilYourNextPick" });
@@ -122,4 +123,30 @@ test("reverse draft mode drafts top prospects to suitor teams for early first-ro
 	assert.ok(drafted.every((p) => suitorTids.has(p.tid)));
 
 	g.setWithoutSavingToDB("reverseDraft", false);
+});
+
+test("reverse-draft suitor screen can exclude a prospect from all suitors if nobody ranks him in top X", async () => {
+	await loadTeamSeasons();
+	await draft.genPlayers(g.get("season"), DEFAULT_LEVEL);
+	await draft.genOrder();
+
+	const draftPicks = await draft.getOrder();
+	const suitors = draftPicks.filter((dp) => dp.round === 1 && dp.pick <= 10);
+	const players = (
+		await idb.cache.players.indexGetAll("playersByDraftYearRetiredYear", [
+			[g.get("season")],
+			[g.get("season"), Infinity],
+		])
+	)
+		.filter((p) => p.tid === PLAYER.UNDRAFTED)
+		.sort((a, b) => b.value - a.value);
+	const lowRankedProspect = players.at(-1)!;
+	const screenedSuitors = await getReverseDraftSuitorsWhoRankProspect({
+		prospect: lowRankedProspect,
+		playersAll: players,
+		suitors,
+		numRankedProspects: 5,
+	});
+
+	assert.strictEqual(screenedSuitors.length, 0);
 });

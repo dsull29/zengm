@@ -17,8 +17,11 @@ import { player, team } from "../index.ts";
 export const getTeamOvrDiffs = (
 	teamPlayers: PlayerWithoutKey<MinimalPlayerRatings>[],
 	players: PlayerWithoutKey<MinimalPlayerRatings>[],
+	options?: {
+		force?: boolean;
+	},
 ) => {
-	if (!DRAFT_BY_TEAM_OVR) {
+	if (!DRAFT_BY_TEAM_OVR && !options?.force) {
 		return [];
 	}
 
@@ -60,6 +63,117 @@ export const getTeamOvrDiffs = (
 
 		return newOvr - baseline;
 	});
+};
+
+const getDraftScore = (
+	p: Player<MinimalPlayerRatings>,
+	i: number,
+	teamOvrDiffs: number[],
+) => {
+	if (DRAFT_BY_TEAM_OVR) {
+		return (teamOvrDiffs[i]! + 0.05 * p.value) ** 40;
+	}
+
+	return p.value ** 69;
+};
+
+const getRankChoiceVoteScore = (
+	p: Player<MinimalPlayerRatings>,
+	i: number,
+	teamOvrDiffs: number[],
+	teamPosStats: Map<
+		string,
+		{
+			count: number;
+			maxOvr: number;
+			allStars: number;
+		}
+	>,
+) => {
+	const pos = p.ratings.at(-1)?.pos ?? "";
+	const posStats = teamPosStats.get(pos) ?? {
+		count: 0,
+		maxOvr: 0,
+		allStars: 0,
+	};
+	const fitPenalty =
+		7 * posStats.count + 0.12 * posStats.maxOvr + 9 * posStats.allStars;
+	return p.value + 4 * teamOvrDiffs[i]! - fitPenalty;
+};
+
+export const getReverseDraftSuitorsWhoRankProspect = async ({
+	prospect,
+	playersAll,
+	suitors,
+	numRankedProspects,
+}: {
+	prospect: Player<MinimalPlayerRatings>;
+	playersAll: Player<MinimalPlayerRatings>[];
+	suitors: Awaited<ReturnType<typeof getReverseDraftSuitors>>;
+	numRankedProspects: number;
+}) => {
+	const prospectIndex = playersAll.findIndex((p) => p.pid === prospect.pid);
+	if (prospectIndex < 0) {
+		return [];
+	}
+
+	const screenedSuitors = [];
+	for (const suitor of suitors) {
+		const teamPlayers = await idb.cache.players.indexGetAll(
+			"playersByTid",
+			suitor.tid,
+		);
+		const teamOvrDiffs = await getTeamOvrDiffs(teamPlayers, playersAll, {
+			force: true,
+		});
+		const teamPosStats = new Map<
+			string,
+			{
+				count: number;
+				maxOvr: number;
+				allStars: number;
+			}
+		>();
+		for (const p of teamPlayers) {
+			const pos = p.ratings.at(-1)?.pos;
+			if (!pos) {
+				continue;
+			}
+			const stats = teamPosStats.get(pos) ?? {
+				count: 0,
+				maxOvr: 0,
+				allStars: 0,
+			};
+			stats.count += 1;
+			stats.maxOvr = Math.max(stats.maxOvr, p.ratings.at(-1)?.ovr ?? 0);
+			if (p.awards.some((award) => award.type === "All-Star")) {
+				stats.allStars += 1;
+			}
+			teamPosStats.set(pos, stats);
+		}
+		const prospectScore = getRankChoiceVoteScore(
+			playersAll[prospectIndex]!,
+			prospectIndex,
+			teamOvrDiffs,
+			teamPosStats,
+		);
+		let numRankedAhead = 0;
+		for (const [i, p] of playersAll.entries()) {
+			if (
+				getRankChoiceVoteScore(p, i, teamOvrDiffs, teamPosStats) > prospectScore
+			) {
+				numRankedAhead += 1;
+				if (numRankedAhead >= numRankedProspects) {
+					break;
+				}
+			}
+		}
+		if (numRankedAhead < numRankedProspects) {
+			screenedSuitors.push(suitor);
+		}
+	}
+
+	return screenedSuitors;
 };
 
 /**
@@ -190,19 +304,36 @@ const runPicks = async (
 					draftPicks,
 					g.get("reverseDraftNumSuitors"),
 				);
+				const prospect = playersAll[0];
+				if (!prospect) {
+					throw new Error("No top prospect available");
+				}
 				if (suitors.length > 0) {
-					const prospect = playersAll[0];
-					if (!prospect) {
-						throw new Error("No top prospect available");
-					}
-					const reverseResult = await prospectChoosesTeam({
+					const screenedSuitors = await getReverseDraftSuitorsWhoRankProspect({
 						prospect,
+						playersAll,
 						suitors,
-						weights: g.get("reverseDraftWeights"),
+						numRankedProspects: g.get("reverseDraftNumProspects"),
 					});
-					selectedDp = reverseResult.selectedPick;
-					selection = prospect;
-					reverseDraftExplanation = reverseResult.explanation;
+					if (screenedSuitors.length > 0) {
+						const reverseResult = await prospectChoosesTeam({
+							prospect,
+							suitors: screenedSuitors,
+							weights: g.get("reverseDraftWeights"),
+						});
+						selectedDp = reverseResult.selectedPick;
+						selection = prospect;
+						reverseDraftExplanation = reverseResult.explanation;
+					} else {
+						const teamPlayers = await idb.cache.players.indexGetAll(
+							"playersByTid",
+							dp.tid,
+						);
+						const teamOvrDiffs = await getTeamOvrDiffs(teamPlayers, playersAll);
+						selection = random.choice(playersAll, (p, i) =>
+							getDraftScore(p, i, teamOvrDiffs),
+						);
+					}
 				} else {
 					selection = playersAll[0]!;
 				}
@@ -213,14 +344,9 @@ const runPicks = async (
 				);
 				const teamOvrDiffs = await getTeamOvrDiffs(teamPlayers, playersAll);
 
-				const score = (p: Player<MinimalPlayerRatings>, i: number) => {
-					if (DRAFT_BY_TEAM_OVR) {
-						return (teamOvrDiffs[i]! + 0.05 * p.value) ** 40;
-					}
-
-					return p.value ** 69;
-				};
-				selection = random.choice(playersAll, score);
+				selection = random.choice(playersAll, (p, i) =>
+					getDraftScore(p, i, teamOvrDiffs),
+				);
 			}
 
 			// selectedDp may differ from draftPicks[0] in reverse draft mode
