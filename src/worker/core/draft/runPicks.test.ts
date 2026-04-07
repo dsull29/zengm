@@ -107,17 +107,17 @@ test("reverse draft mode drafts top prospects to suitor teams for early first-ro
 
 	await draft.runPicks({ type: "untilPick", dpid: preDraft[5]!.dpid });
 
-	const draftedPlayers = (
+	const allDraftedPlayers = (
 		await idb.cache.players.indexGetAll("playersByDraftYearRetiredYear", [
 			[g.get("season")],
 			[g.get("season"), Infinity],
 		])
 	).filter((p) => p.tid >= 0);
-	const drafted = draftedPlayers.filter(
+	const drafted = allDraftedPlayers.filter(
 		(p) => p.draft.round === 1 && p.draft.pick <= 5,
 	);
 
-	assert.strictEqual(draftedPlayers.length, 5);
+	assert.strictEqual(allDraftedPlayers.length, 5);
 	assert.strictEqual(drafted.length, 5);
 	assert.ok(drafted.every((p) => suitorTids.has(p.tid)));
 
