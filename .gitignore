@@ -9,5 +9,6 @@
 /stats-*.html
 /.idea/
 /foo
-/.vscode
+/.vscode/*
+!/.vscode/settings.json
 /tools/names-groups-html
