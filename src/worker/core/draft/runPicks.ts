@@ -294,11 +294,22 @@ const runPicks = async (
 			}
 
 			const dp = draftPicks[0];
+			const firstRoundPicksRemaining = draftPicks.filter(
+				(p) => p.round === 1,
+			).length;
+			const firstRoundPicksMade =
+				g.get("numActiveTeams") - firstRoundPicksRemaining;
+			const reverseDraftEnabled =
+				g.get("phase") === PHASE.DRAFT &&
+				g.get("reverseDraft") &&
+				dp.round === 1 &&
+				firstRoundPicksMade < g.get("reverseDraftNumProspects");
 
 			const singleUserPickInSpectatorMode =
 				g.get("spectator") && action.type === "onePick";
 			const pauseForUserPick =
 				g.get("userTids").includes(dp.tid) &&
+				!reverseDraftEnabled &&
 				!local.autoPlayUntil &&
 				!singleUserPickInSpectatorMode &&
 				action.type !== "untilEnd" &&
@@ -310,17 +321,6 @@ const runPicks = async (
 			if (pauseForUserPick || pauseForDpid) {
 				return afterDoneAuto();
 			}
-
-			const firstRoundPicksRemaining = draftPicks.filter(
-				(p) => p.round === 1,
-			).length;
-			const firstRoundPicksMade =
-				g.get("numActiveTeams") - firstRoundPicksRemaining;
-			const reverseDraftEnabled =
-				g.get("phase") === PHASE.DRAFT &&
-				g.get("reverseDraft") &&
-				dp.round === 1 &&
-				firstRoundPicksMade < g.get("reverseDraftNumProspects");
 
 			let selectedDp = dp;
 			let selection: Player<MinimalPlayerRatings>;
