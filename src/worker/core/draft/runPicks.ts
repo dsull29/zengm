@@ -1,6 +1,8 @@
 import { DRAFT_BY_TEAM_OVR, PHASE, PLAYER } from "../../../common/index.ts";
 import afterPicks from "./afterPicks.ts";
+import getReverseDraftSuitors from "./getReverseDraftSuitors.ts";
 import getOrder from "./getOrder.ts";
+import prospectChoosesTeam from "./prospectChoosesTeam.ts";
 import selectPlayer from "./selectPlayer.ts";
 import { idb } from "../../db/index.ts";
 import { g, local, lock, random } from "../../util/index.ts";
@@ -12,11 +14,22 @@ import type {
 } from "../../../common/types.ts";
 import { player, team } from "../index.ts";
 
+const DRAFT_SCORE_VALUE_WEIGHT = 0.05;
+const DRAFT_SCORE_EXPONENT_BY_TEAM_OVR = 40;
+const DRAFT_SCORE_EXPONENT_BY_VALUE = 69;
+const RANK_CHOICE_PENALTY_SAME_POS = 7;
+const RANK_CHOICE_PENALTY_TOP_SAME_POS_OVR = 0.12;
+const RANK_CHOICE_PENALTY_ALL_STARS = 9;
+const RANK_CHOICE_TEAM_OVR_DIFF_WEIGHT = 4;
+
 export const getTeamOvrDiffs = (
 	teamPlayers: PlayerWithoutKey<MinimalPlayerRatings>[],
 	players: PlayerWithoutKey<MinimalPlayerRatings>[],
+	options?: {
+		force?: boolean;
+	},
 ) => {
-	if (!DRAFT_BY_TEAM_OVR) {
+	if (!DRAFT_BY_TEAM_OVR && !options?.force) {
 		return [];
 	}
 
@@ -58,6 +71,135 @@ export const getTeamOvrDiffs = (
 
 		return newOvr - baseline;
 	});
+};
+
+const getDraftScore = (
+	p: Player<MinimalPlayerRatings>,
+	i: number,
+	teamOvrDiffs: number[],
+) => {
+	if (DRAFT_BY_TEAM_OVR) {
+		return (
+			(teamOvrDiffs[i]! + DRAFT_SCORE_VALUE_WEIGHT * p.value) **
+			DRAFT_SCORE_EXPONENT_BY_TEAM_OVR
+		);
+	}
+
+	return p.value ** DRAFT_SCORE_EXPONENT_BY_VALUE;
+};
+
+const getRankChoiceVoteScore = (
+	p: Player<MinimalPlayerRatings>,
+	i: number,
+	teamOvrDiffs: number[],
+	teamPosStats: Map<
+		string,
+		{
+			count: number;
+			maxOvr: number;
+			allStars: number;
+		}
+	>,
+) => {
+	const pos = p.ratings.at(-1)?.pos ?? "";
+	const posStats = teamPosStats.get(pos) ?? {
+		count: 0,
+		maxOvr: 0,
+		allStars: 0,
+	};
+	const fitPenalty =
+		RANK_CHOICE_PENALTY_SAME_POS * posStats.count +
+		RANK_CHOICE_PENALTY_TOP_SAME_POS_OVR * posStats.maxOvr +
+		RANK_CHOICE_PENALTY_ALL_STARS * posStats.allStars;
+	return (
+		p.value + RANK_CHOICE_TEAM_OVR_DIFF_WEIGHT * teamOvrDiffs[i]! - fitPenalty
+	);
+};
+
+export const getReverseDraftSuitorsWhoRankProspect = async ({
+	prospect,
+	playersAll,
+	suitors,
+	numRankedProspects,
+	userProspectVotesByTid,
+}: {
+	prospect: Player<MinimalPlayerRatings>;
+	playersAll: Player<MinimalPlayerRatings>[];
+	suitors: Awaited<ReturnType<typeof getReverseDraftSuitors>>;
+	numRankedProspects: number;
+	userProspectVotesByTid?: Record<number, number[]>;
+}) => {
+	const prospectIndex = playersAll.findIndex((p) => p.pid === prospect.pid);
+	if (prospectIndex < 0) {
+		return [];
+	}
+
+	const screenedSuitors = [];
+	for (const suitor of suitors) {
+		const userProspectVotes = userProspectVotesByTid?.[suitor.tid];
+		if (userProspectVotes) {
+			const votedProspects = userProspectVotes.slice(0, numRankedProspects);
+			if (votedProspects.includes(prospect.pid)) {
+				screenedSuitors.push(suitor);
+			}
+			continue;
+		}
+
+		const teamPlayers = await idb.cache.players.indexGetAll(
+			"playersByTid",
+			suitor.tid,
+		);
+		const teamOvrDiffs = await getTeamOvrDiffs(teamPlayers, playersAll, {
+			force: true,
+		});
+		const teamPosStats = new Map<
+			string,
+			{
+				count: number;
+				maxOvr: number;
+				allStars: number;
+			}
+		>();
+		for (const p of teamPlayers) {
+			const pos = p.ratings.at(-1)?.pos;
+			if (!pos) {
+				continue;
+			}
+			const stats = teamPosStats.get(pos) ?? {
+				count: 0,
+				maxOvr: 0,
+				allStars: 0,
+			};
+			stats.count += 1;
+			stats.maxOvr = Math.max(stats.maxOvr, p.ratings.at(-1)?.ovr ?? 0);
+			if (p.awards.some((award) => award.type === "All-Star")) {
+				stats.allStars += 1;
+			}
+			teamPosStats.set(pos, stats);
+		}
+		const prospectScore = getRankChoiceVoteScore(
+			playersAll[prospectIndex]!,
+			prospectIndex,
+			teamOvrDiffs,
+			teamPosStats,
+		);
+		let numRankedAhead = 0;
+		for (const [i, p] of playersAll.entries()) {
+			if (
+				getRankChoiceVoteScore(p, i, teamOvrDiffs, teamPosStats) > prospectScore
+			) {
+				numRankedAhead += 1;
+				if (numRankedAhead >= numRankedProspects) {
+					break;
+				}
+			}
+		}
+		if (numRankedAhead < numRankedProspects) {
+			screenedSuitors.push(suitor);
+		}
+	}
+
+	return screenedSuitors;
 };
 
 /**
@@ -152,11 +294,22 @@ const runPicks = async (
 			}
 
 			const dp = draftPicks[0];
+			const firstRoundPicksRemaining = draftPicks.filter(
+				(p) => p.round === 1,
+			).length;
+			const firstRoundPicksMade =
+				g.get("numActiveTeams") - firstRoundPicksRemaining;
+			const reverseDraftEnabled =
+				g.get("phase") === PHASE.DRAFT &&
+				g.get("reverseDraft") &&
+				dp.round === 1 &&
+				firstRoundPicksMade < g.get("reverseDraftNumProspects");
 
 			const singleUserPickInSpectatorMode =
 				g.get("spectator") && action.type === "onePick";
 			const pauseForUserPick =
 				g.get("userTids").includes(dp.tid) &&
+				!reverseDraftEnabled &&
 				!local.autoPlayUntil &&
 				!singleUserPickInSpectatorMode &&
 				action.type !== "untilEnd" &&
@@ -169,35 +322,67 @@ const runPicks = async (
 				return afterDoneAuto();
 			}
 
-			draftPicks.shift();
-
-			const teamPlayers = await idb.cache.players.indexGetAll(
-				"playersByTid",
-				dp.tid,
-			);
-			const teamOvrDiffs = await getTeamOvrDiffs(teamPlayers, playersAll);
-
-			const score = (p: Player<MinimalPlayerRatings>, i: number) => {
-				if (DRAFT_BY_TEAM_OVR) {
-					return (teamOvrDiffs[i]! + 0.05 * p.value) ** 40;
+			let selectedDp = dp;
+			let selection: Player<MinimalPlayerRatings>;
+			let reverseDraftExplanation: string | undefined;
+			if (reverseDraftEnabled) {
+				const suitors = getReverseDraftSuitors(
+					draftPicks,
+					g.get("reverseDraftNumSuitors"),
+				);
+				const prospect = playersAll[0];
+				if (!prospect) {
+					throw new Error("No top prospect available");
 				}
+				if (suitors.length > 0) {
+					const screenedSuitors = await getReverseDraftSuitorsWhoRankProspect({
+						prospect,
+						playersAll,
+						suitors,
+						numRankedProspects: g.get("reverseDraftNumProspects"),
+						userProspectVotesByTid: local.reverseDraftUserProspectVotes,
+					});
+					if (screenedSuitors.length > 0) {
+						const reverseResult = await prospectChoosesTeam({
+							prospect,
+							suitors: screenedSuitors,
+							weights: g.get("reverseDraftWeights"),
+						});
+						selectedDp = reverseResult.selectedPick;
+						selection = prospect;
+						reverseDraftExplanation = reverseResult.explanation;
+					} else {
+						const teamPlayers = await idb.cache.players.indexGetAll(
+							"playersByTid",
+							dp.tid,
+						);
+						const teamOvrDiffs = await getTeamOvrDiffs(teamPlayers, playersAll);
+						selection = random.choice(playersAll, (p, i) =>
+							getDraftScore(p, i, teamOvrDiffs),
+						);
+					}
+				} else {
+					selection = playersAll[0]!;
+				}
+			} else {
+				const teamPlayers = await idb.cache.players.indexGetAll(
+					"playersByTid",
+					dp.tid,
+				);
+				const teamOvrDiffs = await getTeamOvrDiffs(teamPlayers, playersAll);
 
-				return p.value ** 69;
-			};
-			/*let sum = 0;
-			for (const p of playersAll) {
-				sum += score(p);
+				selection = random.choice(playersAll, (p, i) =>
+					getDraftScore(p, i, teamOvrDiffs),
+				);
 			}
-			for (let i = 0; i < playersAll.length; i++) {
-				const p = playersAll[i];
-				console.log(p.firstName, p.lastName, teamOvrDiffs[i], 0.05 * p.value, score(p) / sum);
-			}
-			console.log(sum);*/
 
-			const selection = random.choice(playersAll, score);
+			// selectedDp may differ from draftPicks[0] in reverse draft mode
+			draftPicks = draftPicks.filter((p) => p.dpid !== selectedDp.dpid);
 
 			const pid = selection.pid;
-			await selectPlayer(dp, pid);
+			await selectPlayer(selectedDp, pid, {
+				reverseDraftExplanation,
+			});
 			pids.push(pid);
 			playersAll = playersAll.filter((p) => p !== selection); // Delete from the list of undrafted players
 

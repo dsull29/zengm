@@ -82,6 +82,19 @@ export const getDefaultSettings = () => {
 			"numPlayoffByes",
 		),
 		draftType: unwrapGameAttribute(defaultGameAttributes, "draftType"),
+		reverseDraft: unwrapGameAttribute(defaultGameAttributes, "reverseDraft"),
+		reverseDraftNumProspects: unwrapGameAttribute(
+			defaultGameAttributes,
+			"reverseDraftNumProspects",
+		),
+		reverseDraftNumSuitors: unwrapGameAttribute(
+			defaultGameAttributes,
+			"reverseDraftNumSuitors",
+		),
+		reverseDraftWeights: unwrapGameAttribute(
+			defaultGameAttributes,
+			"reverseDraftWeights",
+		),
 		draftAges: unwrapGameAttribute(defaultGameAttributes, "draftAges"),
 		playersRefuseToNegotiate: unwrapGameAttribute(
 			defaultGameAttributes,

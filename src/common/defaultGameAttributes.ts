@@ -211,6 +211,15 @@ const defaultGameAttributes: GameAttributesLeagueWithHistory = {
 	otl: wrap(false),
 
 	draftType: "nba2019",
+	reverseDraft: false,
+	reverseDraftNumProspects: 5,
+	reverseDraftNumSuitors: 10,
+	reverseDraftWeights: {
+		market: 0.35,
+		quality: 0.35,
+		fit: 0.3,
+		randomness: 0.02,
+	},
 	draftLotteryCustomChances: [
 		140, 140, 140, 125, 105, 90, 75, 60, 45, 30, 20, 15, 10, 5,
 	],

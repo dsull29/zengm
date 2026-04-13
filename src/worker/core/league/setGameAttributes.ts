@@ -178,6 +178,37 @@ const setGameAttributes = async (
 		}
 	}
 
+	if (
+		toUpdate.has("reverseDraftNumProspects") ||
+		toUpdate.has("reverseDraftNumSuitors")
+	) {
+		const reverseDraftNumProspects = g.get("reverseDraftNumProspects");
+		const reverseDraftNumSuitors = g.get("reverseDraftNumSuitors");
+		const numActiveTeams = g.get("numActiveTeams");
+
+		if (reverseDraftNumSuitors > numActiveTeams) {
+			await setGameAttributes(
+				{
+					reverseDraftNumSuitors: numActiveTeams,
+				},
+				{
+					skipDraftGenPicks: true,
+				},
+			);
+		}
+
+		if (reverseDraftNumProspects > reverseDraftNumSuitors) {
+			await setGameAttributes(
+				{
+					reverseDraftNumProspects: reverseDraftNumSuitors,
+				},
+				{
+					skipDraftGenPicks: true,
+				},
+			);
+		}
+	}
+
 	if (toUpdate.has("difficulty")) {
 		await updateMetaDifficulty(g.get("difficulty"));
 	}

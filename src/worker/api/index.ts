@@ -1044,6 +1044,15 @@ const draftUser = async (pid: number, conditions: Conditions) => {
 	const dp = draftPicks[0];
 
 	if (dp && g.get("userTids").includes(dp.tid)) {
+		if (
+			g.get("phase") === PHASE.DRAFT &&
+			g.get("reverseDraft") &&
+			dp.round === 1 &&
+			dp.pick <= g.get("reverseDraftNumProspects")
+		) {
+			return;
+		}
+
 		draftPicks.shift();
 		await draft.selectPlayer(dp, pid);
 		await draft.afterPicks(draftPicks.length === 0, conditions);
@@ -3527,6 +3536,13 @@ const setGOATFormula = async ({
 	}
 };
 
+const setReverseDraftUserProspectVotes = async (pids: number[]) => {
+	local.reverseDraftUserProspectVotes = {
+		...(local.reverseDraftUserProspectVotes ?? {}),
+		[g.get("userTid")]: [...new Set(pids)],
+	};
+};
+
 const setLocal = async <T extends keyof Local>([key, value]: [T, Local[T]]) => {
 	if (key === "autoSave" && value === false) {
 		await idb.cache.flush();
@@ -5234,6 +5250,7 @@ export default {
 		setGOATFormula,
 		setLocal,
 		setNote,
+		setReverseDraftUserProspectVotes,
 		setSavedTrade,
 		setScheduleFromEditor,
 		sign,

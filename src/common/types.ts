@@ -228,6 +228,13 @@ export type DraftType =
 	| "custom"
 	| "cola";
 
+export type ReverseDraftWeights = {
+	market: number;
+	quality: number;
+	fit: number;
+	randomness: number;
+};
+
 // Key is team ID receiving this asset
 // Why store name and extra draft pick info? For performance a bit, but mostly in case old players are deleted in a league, the trade event will still show something reasonable
 type TradeEventAsset =
@@ -543,6 +550,10 @@ export type GameAttributesLeague = {
 	draftPickAutoContract: boolean;
 	draftPickAutoContractPercent: number;
 	draftPickAutoContractRounds: number;
+	reverseDraft: boolean;
+	reverseDraftNumProspects: number;
+	reverseDraftNumSuitors: number;
+	reverseDraftWeights: ReverseDraftWeights;
 	draftType: DraftType;
 	draftLotteryCustomChances: number[];
 	draftLotteryCustomNumPicks: number;
@@ -1395,6 +1406,7 @@ export type Local = {
 	playerOvrStd: number;
 	playerOvrMeanStdStale: boolean;
 	playingUntilEndOfRound: boolean;
+	reverseDraftUserProspectVotes: Record<number, number[]> | undefined;
 	realPlayerActiveSeasons:
 		| Record<
 				string,

@@ -6,6 +6,7 @@ import { idb } from "../../db/index.ts";
 import { g } from "../../util/index.ts";
 import { getDraftTids, loadTeamSeasons } from "./testHelpers.ts";
 import { DEFAULT_LEVEL } from "../../../common/budgetLevels.ts";
+import { getReverseDraftSuitorsWhoRankProspect } from "./runPicks.ts";
 
 const testRunPicks = async (numNow: number, numTotal: number) => {
 	const pids = await draft.runPicks({ type: "untilYourNextPick" });
@@ -81,4 +82,116 @@ test("then allow the user to draft in the second round", () => {
 test("when called again after the user drafts, should draft more players to finish the draft", () => {
 	const numAfter = 60 - userPick2;
 	return testRunPicks(numAfter, userPick2 + numAfter);
+});
+
+test("reverse draft mode drafts top prospects to suitor teams for early first-round picks", async () => {
+	g.setWithoutSavingToDB("reverseDraft", true);
+	g.setWithoutSavingToDB("reverseDraftNumProspects", 5);
+	g.setWithoutSavingToDB("reverseDraftNumSuitors", 10);
+	g.setWithoutSavingToDB("reverseDraftWeights", {
+		market: 0.35,
+		quality: 0.35,
+		fit: 0.3,
+		randomness: 0,
+	});
+
+	await loadTeamSeasons();
+	await draft.genPlayers(g.get("season"), DEFAULT_LEVEL);
+	await draft.genOrder();
+
+	const preDraft = await draft.getOrder();
+	const suitorTids = new Set(
+		preDraft
+			.filter((dp) => dp.round === 1 && dp.pick <= 10)
+			.map((dp) => dp.tid),
+	);
+
+	await draft.runPicks({ type: "untilPick", dpid: preDraft[5]!.dpid });
+
+	const allDraftedPlayers = (
+		await idb.cache.players.indexGetAll("playersByDraftYearRetiredYear", [
+			[g.get("season")],
+			[g.get("season"), Infinity],
+		])
+	).filter((p) => p.tid >= 0);
+	const drafted = allDraftedPlayers.filter(
+		(p) => p.draft.round === 1 && p.draft.pick <= 5,
+	);
+
+	assert.strictEqual(allDraftedPlayers.length, 5);
+	assert.strictEqual(drafted.length, 5);
+	assert.ok(drafted.every((p) => suitorTids.has(p.tid)));
+
+	g.setWithoutSavingToDB("reverseDraft", false);
+});
+
+test("reverse-draft suitor screen can exclude a prospect from all suitors if nobody ranks him in top X", async () => {
+	await loadTeamSeasons();
+	await draft.genPlayers(g.get("season"), DEFAULT_LEVEL);
+	await draft.genOrder();
+
+	const draftPicks = await draft.getOrder();
+	const suitors = draftPicks.filter((dp) => dp.round === 1 && dp.pick <= 10);
+	const players = (
+		await idb.cache.players.indexGetAll("playersByDraftYearRetiredYear", [
+			[g.get("season")],
+			[g.get("season"), Infinity],
+		])
+	)
+		.filter((p) => p.tid === PLAYER.UNDRAFTED)
+		.sort((a, b) => b.value - a.value);
+	const lowestValueProspect = players.at(-1)!;
+	const screenedSuitors = await getReverseDraftSuitorsWhoRankProspect({
+		prospect: lowestValueProspect,
+		playersAll: players,
+		suitors,
+		numRankedProspects: 5,
+	});
+
+	assert.strictEqual(screenedSuitors.length, 0);
+});
+
+test("reverse-draft suitor screen honors explicit manual votes", async () => {
+	await loadTeamSeasons();
+	await draft.genPlayers(g.get("season"), DEFAULT_LEVEL);
+	await draft.genOrder();
+
+	const draftPicks = await draft.getOrder();
+	const suitors = draftPicks.filter((dp) => dp.round === 1 && dp.pick <= 10);
+	const manualVoteSuitor = suitors[0]!;
+	assert.ok(manualVoteSuitor);
+
+	const players = (
+		await idb.cache.players.indexGetAll("playersByDraftYearRetiredYear", [
+			[g.get("season")],
+			[g.get("season"), Infinity],
+		])
+	)
+		.filter((p) => p.tid === PLAYER.UNDRAFTED)
+		.sort((a, b) => b.value - a.value);
+
+	const topProspect = players[0]!;
+	const otherProspect = players[1]!;
+
+	const screenedWithoutVote = await getReverseDraftSuitorsWhoRankProspect({
+		prospect: topProspect,
+		playersAll: players,
+		suitors,
+		numRankedProspects: 5,
+		userProspectVotesByTid: {
+			[manualVoteSuitor.tid]: [otherProspect.pid],
+		},
+	});
+	assert.ok(screenedWithoutVote.every((dp) => dp.tid !== manualVoteSuitor.tid));
+
+	const screenedWithVote = await getReverseDraftSuitorsWhoRankProspect({
+		prospect: topProspect,
+		playersAll: players,
+		suitors,
+		numRankedProspects: 5,
+		userProspectVotesByTid: {
+			[manualVoteSuitor.tid]: [topProspect.pid],
+		},
+	});
+	assert.ok(screenedWithVote.some((dp) => dp.tid === manualVoteSuitor.tid));
 });

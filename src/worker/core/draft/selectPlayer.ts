@@ -16,7 +16,13 @@ import getRookieContractLength from "./getRookieContractLength.ts";
  * @param {number} pid Integer player ID for the player to be drafted.
  * @return {Promise}
  */
-const selectPlayer = async (dp: DraftPick, pid: number) => {
+const selectPlayer = async (
+	dp: DraftPick,
+	pid: number,
+	options?: {
+		reverseDraftExplanation?: string;
+	},
+) => {
 	if (dp.pick <= 0) {
 		console.log(dp);
 		throw new Error(`Invalid draft pick number "${dp.pick}"`);
@@ -192,7 +198,11 @@ const selectPlayer = async (dp: DraftPick, pid: number) => {
 			p.firstName
 		} ${p.lastName}</a> with the ${helpers.ordinal(
 			pickNum,
-		)} pick in the ${draftName}.`,
+		)} pick in the ${draftName}.${
+			options?.reverseDraftExplanation
+				? ` The prospect ${options.reverseDraftExplanation}.`
+				: ""
+		}`,
 		showNotification: false,
 		pids: [p.pid],
 		tids: eventTids,

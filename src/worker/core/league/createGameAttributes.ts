@@ -275,6 +275,27 @@ const createGameAttributes = async (
 		throw new Error("numDraftRounds must be a positive number");
 	}
 
+	if (gameAttributes.reverseDraftNumProspects < 0) {
+		throw new Error("reverseDraftNumProspects must be a non-negative number");
+	}
+
+	if (gameAttributes.reverseDraftNumSuitors < 1) {
+		throw new Error("reverseDraftNumSuitors must be greater than 0");
+	}
+
+	if (gameAttributes.reverseDraftNumSuitors > gameAttributes.numActiveTeams) {
+		gameAttributes.reverseDraftNumSuitors = gameAttributes.numActiveTeams;
+	}
+
+	if (
+		gameAttributes.reverseDraftNumProspects >
+		gameAttributes.reverseDraftNumSuitors
+	) {
+		throw new Error(
+			"reverseDraftNumProspects must be less than or equal to reverseDraftNumSuitors",
+		);
+	}
+
 	{
 		const info = getInitialNumGamesConfDivSettings(teamInfos, {
 			divs: unwrapGameAttribute(gameAttributes, "divs"),
