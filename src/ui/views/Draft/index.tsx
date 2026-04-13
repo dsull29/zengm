@@ -134,7 +134,7 @@ const Draft = ({
 		!fantasyDraft &&
 		!expansionDraft &&
 		!spectator &&
-		remainingPicks.some(
+		draftedSorted.some(
 			(p) =>
 				p.draft.round === 1 &&
 				p.draft.pick <= reverseDraftNumSuitors &&
