@@ -155,8 +155,8 @@ const Draft = ({
 		colsUndrafted.splice(
 			6,
 			0,
-			...getCols(["Vote"], {
-				Vote: {
+			...getCols([""], {
+				"": {
 					noSearch: true,
 					sortSequence: [],
 				},
