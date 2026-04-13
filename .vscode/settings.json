@@ -1,5 +1,4 @@
 {
 	"npm.packageManager": "pnpm",
-	"npm.scriptRunner": "terminal",
-	"npm.scriptExplorerAction": "run"
+	"npm.scriptRunner": "terminal"
 }
